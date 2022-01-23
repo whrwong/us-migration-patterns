@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<html>
+<head>
+<title>State migration</title>
+<link rel = "stylesheet" type = "text/css" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap.min.css">
+<style type="text/css">
+
+
+#tt { pointer-events: none;color:white;}
+
+#tipContainer {  font-size:16px;position:absolute;width:180px;z-index:100;background-repeat:no-repeat;text-align:left;line-height:20px;}
+
+#tipLocation {font-weight:normal;font-family:Georgia; font-style: Italic; color:white;margin:0px;padding:10px 10px;background:#333;font-size:14px;}
+
+#tipCount {font-weight:bold;font-size:32px;letter-spacing:-1px;margin:0px;padding:0px 10px 10px 10px;color:#333;}
+
+#tipKey {font-weight:normal;font-size:10px;color:#333;margin:0px;padding:5px 0px 5px 10px;background:rgba(218,218,218,0.5);}
+
+#tt2 { pointer-events: none;color:white;}
+
+#tipContainer2 {  font-size:16px;position:absolute;width:250px;z-index:100;background-repeat:no-repeat;text-align:left;line-height:20px;}
+
+#tipLocation2 {font-weight:normal;font-family:Georgia; font-style: Italic; color:white;margin:0px;padding:10px 10px;background:#333;font-size:14px;}
+
+#tipCount2 {font-weight:bold;font-size:32px;letter-spacing:-1px;margin:0px;padding:0px 10px 10px 10px;color:#333;}
+
+#tipKey2 {font-weight:normal;font-size:10px;color:#333;margin:0px;padding:5px 0px 5px 10px;background:rgba(218,218,218,0.5);}
+
+.tipClear { clear:both;}
+
+</style>
+
+
+
+</head>
+<body style = "padding-left: 10px;">
+
+
+
+<h3>US Immigration and Emigration</h3>
+<p>The size of the circles migrations to and from the corresponding state. A positive net migration is in green (more people moving to versus from the state). Red indicates negative net migration (more people are moving from versus to the state). You can hover over each state to view the raw numbers and click a state to view migration flows from that state to other states. Green indicates a net gain, red indicates a net loss. </p>
+
+<div id = "maincontainer" style="position:absolute;">
+
+
+
+  <div id = "map"></div>
+
+
+  
+  
+  </div>
+
+
+
+
+<script type="text/javascript" src="{{url_for('static', filename='d3.v3.js')}}"></script>
+<script src="https://d3js.org/d3.geo.projection.v0.min.js" charset="utf-8"></script>
+
+
+
+<script type="text/javascript">
+   //Width and height
+  var w = 950;
+  var h = 600;
+  var centered;
+  
+  var formatC = d3.format(",.0f");
+  var formatD = d3.format("+,.0f");
+
+   var immin, immax, exmin, exmax;
+ 
+  var projection = d3.geo.albersUsa()
+  .scale(1000)
+  .translate([w / 2 , h / 2 ]);
+
+   //Define path generator
+  var path = d3.geo.path()
+  .projection(projection);
+  
+  var colors = ["#EDF8FB","#41083e"];
+  var immdomain = [24431,537148];
+  var emmdomain = [20056,566986];
+  
+  var circleSize = d3.scale.linear().range([0,25000]).domain([0, 137175]);
+
+  var lineSize = d3.scale.linear().range([2,25]).domain([0, 35000]);
+
+  var fillcolor = d3.scale.linear().range(colors).domain(immdomain);
+
+  
+   //Create SVG element
+  var svg = d3.select("#map")
+  .append("svg")
+  .attr("width", w)
+  .attr("height", h)
+  .style("background", "#fff");
+  
+
+  var fp = d3.format(".1f");
+  
+   //initialize html tooltip
+  var tooltip = d3.select("#maincontainer")
+  .append("div")
+  .attr("id", "tt")
+  .style("z-index", "10")
+  .style("position", "absolute")
+  .style("visibility", "hidden");
+  
+    var tooltip2 = d3.select("#maincontainer")
+  .append("div")
+  .attr("id", "tt2")
+  .style("z-index", "10")
+  .style("position", "absolute")
+  .style("visibility", "hidden");
+  
+  var g = svg.append("g");
+
+// // previous version
+// var coming, going;
+//   d3.csv("{{url_for('index')}}"coming, function (data) {
+//     coming = data;
+  
+//   });
+          
+//   d3.csv(going, function (data) {
+// going = data;  
+  
+  
+var coming, going;
+  d3.csv("{{url_for('static', filename='coming.csv') }}", function (data) {
+  	coming = data;
+  });
+					
+  d3.csv("{{url_for('static', filename='going.csv') }}", function (data) {
+going = data;
+
+  d3.json("{{url_for('static', filename='state.json') }}", function (json) {
+
+    for (var i = 0; i < data.length; i++) {
+    var dataName = data[i].state;
+    var tempObj = {};
+    for (var propt in data[i]) {
+      var valz = parseFloat(data[i][propt]);
+      tempObj[propt] = valz;
+    }
+    
+    //Find the corresponding state inside the GeoJSON
+    for (var j = 0; j < json.features.length; j++) {
+      var jsonState = json.features[j].properties.name;
+      
+      if (dataName == jsonState) {
+      
+      matched = true;
+      json.features[j].properties.state = dataName;
+      json.features[j].id = dataName;
+      json.features[j].abbrev = data[i].abbrev;
+      json.features[j].ind = i;
+
+      for (var propt in tempObj) {
+        if(!isNaN(tempObj[propt])) {
+        json.features[j].properties[propt] = tempObj[propt];
+        }
+
+      }
+      break;
+      }
+    }
+    }
+
+  
+    //Bind data and create one path per GeoJSON feature
+    g.selectAll("path")
+    .data(json.features)
+    .enter()
+    .append("path")
+    .attr("class", "state")
+    .attr("id", function(d) {
+      return d.properties.state;
+      })
+    .attr("d", path)
+    .attr("stroke-width", 0.5)
+    .style("stroke", "#666")
+    .style("fill", "#fff");
+         
+     g.selectAll("circle")
+  .data(json.features)
+  .enter().append("circle")
+  .attr("cx", function(d) {
+    var centname = d.properties.name;
+    var ctroid;
+    ctroid = path.centroid(d)[0];
+    return ctroid;
+  })
+  .attr("cy", function(d) {
+    var centname = d.properties.name;
+    var ctroid;
+    ctroid = path.centroid(d)[1];
+    return ctroid;
+  })
+  .attr("r", function(d) {
+    var diff = d.properties.total_imm - d.properties.total_emm;
+    return circleSize(Math.sqrt(Math.abs(diff)/Math.PI));
+  
+  })
+  .attr("class", "circ")
+  .attr("id", function(d) {return d.abbrev;})
+  .attr("fill", function(d) {
+    var diff = d.properties.total_imm - d.properties.total_emm;
+    if(diff>0) {
+    return "#65a89d";
+    } else {
+    return "#a96a46";
+    }
+  
+  })
+  .attr("fill-opacity", "0.5")
+  .attr("stroke", "#fff")
+  .attr("stroke-weight", "0.5")
+  
+    
+    .on("mouseover", function (d) {
+      return toolOver(d, this);
+    })
+    .on("mousemove", function (d) {
+      var m = d3.mouse(this);
+      mx = m[0];
+      my = m[1];
+      return toolMove(mx, my, d);
+    })
+    .on("mouseout", function (d) {
+      return toolOut(d, this);
+    })
+  .on("click", function(d) {clicked(d)});
+
+    
+  });
+  });
+  
+function toolOver(v, thepath) {
+
+  d3.select(thepath).style({
+    "fill-opacity": "0.7",
+    "cursor":"pointer"
+  });
+  return tooltip.style("visibility", "visible");
+};
+
+function toolOut(m, thepath) {
+  d3.select(thepath).style({
+    "fill-opacity": "0.5",
+    "cursor":""
+  });
+  return tooltip.style("visibility", "hidden");
+};
+
+
+function toolMove(mx, my, data) {
+
+  if (mx < 120) {
+    mx = 120
+  };
+  
+    if (my < 40) {
+    my = 40
+  };
+  return tooltip.style("top", my + -140 + "px").style("left", mx - 120 + "px").html("<div id='tipContainer'><div id='tipLocation'><b>" + data.id + "</b></div><div id='tipKey'>Migration in: <b>" + formatC(data.properties.total_imm) + "</b><br>Migration out: <b>" + formatC(data.properties.total_emm) + "</b><br>Net migration: <b>" + formatC((data.properties.total_imm - data.properties.total_emm)) + "</b></div><div class='tipClear'></div> </div>");
+};
+
+function toolOver2(v, thepath) {
+
+  d3.select(thepath).style({
+    "opacity": "1",
+    "cursor":"pointer"
+  });
+  return tooltip2.style("visibility", "visible");
+};
+
+function toolOut2(m, thepath) {
+  d3.select(thepath).style({
+    "opacity": "0.5",
+    "cursor":""
+  });
+  return tooltip2.style("visibility", "hidden");
+};
+
+function toolMove2(mx, my, home, end, v1, v2) {
+var diff = v1-v2;
+
+  if (mx < 120) {
+    mx = 120
+  };
+  
+    if (my < 40) {
+    my = 40
+  };
+  return tooltip2.style("top", my + -140 + "px").style("left", mx - 120 + "px").html("<div id='tipContainer2'><div id='tipLocation'><b>" + home + "/" + end + "</b></div><div id='tipKey2'>Migration, " + home + " to " + end +": <b>" + formatC(v2) + "</b><br>Migration, " + end + " to " + home +": <b>" + formatC(v1)+ "</b><br>Net change, " + home + ": <b>" + formatD(v1-v2) + "</b></div><div class='tipClear'></div> </div>");
+};
+
+  
+  function clicked(selected) {
+  //var coming = selected.properties;
+  var selname = selected.id;
+
+/*
+  d3.selectAll(".circ")
+  .attr("fill-opacity", "0.2");
+*/
+  
+  var homex = path.centroid(selected)[0];
+  var homey = path.centroid(selected)[1];
+
+  g.selectAll(".goingline")
+  .attr("stroke-dasharray", 0)
+  .remove()
+  
+  
+  g.selectAll(".goingline")
+  .data(going)
+  .enter().append("path")
+  .attr("class", "goingline")
+  
+  .attr("d", function(d,i) 
+    {
+  //console.log(coming[i][selname], coming[i].state);
+  //console.log(going[i][selname], going[i].state);
+    var abb = d.abbrev;
+    var finalval = coming[i][selname] - going[i][selname];
+    
+    
+    var theState = d3.select("#" + abb);
+    
+  if(!isNaN(finalval)) {
+    var startx = path.centroid(theState[0][0].__data__)[0];
+    var starty = path.centroid(theState[0][0].__data__)[1];
+
+      if(finalval > 0) {
+              return "M" + startx + "," + starty + " Q" + (startx + homex)/2 + " " + (starty + homey)/1.5 +" " + homex+" "   + homey;
+
+    } else {
+        return "M" + homex + "," + homey + " Q" + (startx + homex)/2 + " " + (starty + homey)/2.5 +" " + startx+" "   + starty;
+    }
+    }
+    })
+    
+  .call(transition)
+
+  .attr("stroke-width", function(d,i) {
+  var finalval = coming[i][selname] - going[i][selname];
+  
+    return lineSize(parseFloat(Math.abs(finalval)));
+    })
+  .attr("stroke", function(d,i) {
+  var finalval = coming[i][selname] - going[i][selname];
+  if(finalval > 0) {
+  
+  return "#65a89d";
+  } else {
+  return "#a96a46";
+  }
+  
+  })
+  .attr("fill", "none")
+  .attr("opacity", 0.5)
+  .attr("stroke-linecap", "round")
+  .on("mouseover", function (d) {
+      return toolOver2(d, this);
+    })
+    .on("mousemove", function (d,i) {
+      var m = d3.mouse(this);
+      mx = m[0];
+      my = m[1];
+      return toolMove2(mx, my, selname, d.state, coming[i][selname], going[i][selname]);
+    })
+    .on("mouseout", function (d) {
+      return toolOut2(d, this);
+    });
+
+  
+  }
+  
+  
+function transition(path) {
+  path.transition()
+      .duration(1500)
+      .attrTween("stroke-dasharray", tweenDash);
+}
+
+function tweenDash() {
+  var l = this.getTotalLength(),
+      i = d3.interpolateString("0," + l, l + "," + l);
+  return function(t) { return i(t); };
+}
+
+d3.select(self.frameElement).style("height", "700px");
+
+</script>
+
+
+
+
+
+</body>
+</html>
